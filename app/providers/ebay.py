@@ -32,6 +32,82 @@ def extract_offer_id(url: str) -> str:
     return url
 
 
+def _search_ebay_via_jina(
+    brand: str, model: str, part_type: str, max_price_eur: float | None, timeout_seconds: int = 24
+) -> list[dict]:
+    query = build_query(brand, model, part_type)
+    max_price_param = f"&_udhi={int(max_price_eur)}" if max_price_eur else ""
+    source_url = f"{BASE_URL}/sch/i.html?_nkw={quote_plus(query)}&_sop=15&rt=nc{max_price_param}"
+    mirror_url = "https://r.jina.ai/http://" + source_url.replace("https://", "")
+
+    headers = {
+        "User-Agent": "PhoneRepairOffersBot/1.0 (+https://offers.actually-caring-about-billionaires.online)",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+    }
+    with httpx.Client(timeout=timeout_seconds, follow_redirects=True, headers=headers) as client:
+        response = client.get(mirror_url)
+        response.raise_for_status()
+        text = response.text
+
+    offers: list[dict] = []
+    # Mirror format usually exposes listing links plus nearby price text.
+    pattern = re.compile(
+        r"\[(?P<title>[^\]]+)\]\((?P<url>https://www\.ebay\.[^)]+/itm/[^)]+)\)(?P<tail>.{0,260})",
+        re.IGNORECASE | re.DOTALL,
+    )
+    for match in pattern.finditer(text):
+        raw_title = normalize_spaces(match.group("title"))
+        if (
+            not raw_title
+            or raw_title.lower().startswith("image ")
+            or "shop on ebay" in raw_title.lower()
+        ):
+            continue
+
+        title = raw_title.split("La page s'ouvre", 1)[0].strip()
+        url_value = normalize_spaces(match.group("url"))
+        if not title or not url_value:
+            continue
+
+        tail = normalize_spaces(match.group("tail"))
+        price_eur = parse_price_to_eur(tail)
+        if price_eur <= 0:
+            continue
+
+        source_offer_id = extract_offer_id(url_value)
+        total = round(price_eur, 2)
+        offer_id = compute_offer_id("ebay", source_offer_id, url_value)
+        offers.append(
+            {
+                "id": offer_id,
+                "source": "ebay",
+                "sourceOfferId": source_offer_id,
+                "title": title,
+                "url": url_value,
+                "imageUrl": None,
+                "priceEur": round(price_eur, 2),
+                "shippingEur": 0.0,
+                "totalEur": total,
+                "location": None,
+                "conditionText": None,
+                "postedAt": None,
+                "queryType": part_type,
+                "rankScore": compute_rank_score(title, total),
+            }
+        )
+
+    # Dedup quickly by sourceOfferId while preserving order.
+    seen: set[str] = set()
+    filtered: list[dict] = []
+    for row in offers:
+        key = str(row.get("sourceOfferId"))
+        if key in seen:
+            continue
+        seen.add(key)
+        filtered.append(row)
+    return filtered[:120]
+
+
 def search_ebay(
     brand: str, model: str, part_type: str, max_price_eur: float | None, timeout_seconds: int = 18
 ) -> list[dict]:
@@ -122,4 +198,6 @@ def search_ebay(
             }
         )
 
-    return offers[:120]
+    if offers:
+        return offers[:120]
+    return _search_ebay_via_jina(brand, model, part_type, max_price_eur, timeout_seconds=24)

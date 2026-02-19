@@ -41,6 +41,74 @@ def _walk_for_ads(node: Any, out: list[dict[str, Any]]) -> None:
             _walk_for_ads(value, out)
 
 
+def _search_leboncoin_via_jina(
+    brand: str,
+    model: str,
+    part_type: str,
+    max_price_eur: float | None,
+    timeout_seconds: int = 24,
+) -> list[dict[str, Any]]:
+    query = build_query(brand, model, part_type)
+    max_price_param = ""
+    if max_price_eur is not None and max_price_eur > 0:
+        max_price_param = f"&price=min-{int(max_price_eur)}"
+    source_url = f"{BASE_URL}/recherche?text={quote_plus(query)}{max_price_param}"
+    mirror_url = "https://r.jina.ai/http://" + source_url.replace("https://", "")
+
+    headers = {
+        "User-Agent": "PhoneRepairOffersBot/1.0 (+https://offers.actually-caring-about-billionaires.online)",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+    }
+    with httpx.Client(timeout=timeout_seconds, follow_redirects=True, headers=headers) as client:
+        response = client.get(mirror_url)
+        response.raise_for_status()
+        text = response.text
+
+    offers: list[dict[str, Any]] = []
+    pattern = re.compile(
+        r"\[\]\((?P<url>https://www\.leboncoin\.fr/ad/[^\)]+)\)(?P<title>[^\n]+)\n(?P<tail>.{0,220})",
+        re.IGNORECASE | re.DOTALL,
+    )
+    for match in pattern.finditer(text):
+        url = normalize_spaces(match.group("url"))
+        title = normalize_spaces(match.group("title"))
+        tail = normalize_spaces(match.group("tail"))
+        if not url or not title:
+            continue
+
+        price_eur = parse_price_to_eur(tail)
+        if price_eur <= 0:
+            continue
+
+        listing_id = url
+        m = re.search(r"/([0-9]+)$", url)
+        if m:
+            listing_id = m.group(1)
+
+        total_eur = round(price_eur, 2)
+        offer_id = compute_offer_id("leboncoin", listing_id, url)
+        offers.append(
+            {
+                "id": offer_id,
+                "source": "leboncoin",
+                "sourceOfferId": listing_id,
+                "title": title,
+                "url": url,
+                "imageUrl": None,
+                "priceEur": round(price_eur, 2),
+                "shippingEur": 0.0,
+                "totalEur": total_eur,
+                "location": None,
+                "conditionText": None,
+                "postedAt": None,
+                "queryType": part_type,
+                "rankScore": compute_rank_score(title, total_eur),
+            }
+        )
+
+    return offers[:120]
+
+
 def search_leboncoin(
     brand: str, model: str, part_type: str, max_price_eur: float | None, timeout_seconds: int = 18
 ) -> list[dict[str, Any]]:
@@ -55,10 +123,17 @@ def search_leboncoin(
         "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
     }
 
-    with httpx.Client(timeout=timeout_seconds, follow_redirects=True, headers=headers) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        html = response.text
+    try:
+        with httpx.Client(
+            timeout=timeout_seconds, follow_redirects=True, headers=headers
+        ) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            html = response.text
+    except httpx.HTTPError:
+        return _search_leboncoin_via_jina(
+            brand, model, part_type, max_price_eur, timeout_seconds=24
+        )
 
     soup = BeautifulSoup(html, "lxml")
     candidates: list[dict[str, Any]] = []
@@ -171,4 +246,6 @@ def search_leboncoin(
                 }
             )
 
-    return offers[:120]
+    if offers:
+        return offers[:120]
+    return _search_leboncoin_via_jina(brand, model, part_type, max_price_eur, timeout_seconds=24)
