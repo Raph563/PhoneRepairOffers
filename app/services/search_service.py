@@ -13,7 +13,7 @@ from app.providers.leboncoin import search_leboncoin
 from app.services.image_enricher import ImageEnricher
 from app.services.offer_tools import dedupe_offers
 
-ProviderFn = Callable[[str, str, str, float | None], list[dict[str, Any]]]
+ProviderFn = Callable[[str, str, str, float | None, str], list[dict[str, Any]]]
 
 
 class SearchService:
@@ -47,6 +47,7 @@ class SearchService:
             "brand": req.brand.strip().lower(),
             "model": req.model.strip().lower(),
             "partType": req.partType.value,
+            "category": req.category.value,
             "maxPriceEur": req.maxPriceEur,
             "sources": sorted(source.value for source in req.sources),
         }
@@ -78,7 +79,14 @@ class SearchService:
                     provider_errors[source_name] = "provider_not_supported"
                     continue
                 futures[
-                    pool.submit(fn, req.brand, req.model, req.partType.value, req.maxPriceEur)
+                    pool.submit(
+                        fn,
+                        req.brand,
+                        req.model,
+                        req.partType.value,
+                        req.maxPriceEur,
+                        req.category.value,
+                    )
                 ] = source_name
 
             for future in as_completed(futures):

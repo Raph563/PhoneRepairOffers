@@ -22,10 +22,16 @@ RECENT_IDS_CACHE: dict[str, dict] = {}
 RECENT_IDS_TTL_SECONDS = 900
 
 
-def build_query(brand: str, model: str, part_type: str) -> str:
+def build_query(
+    brand: str, model: str, part_type: str, category: str = "mobile_phone_parts"
+) -> str:
     if part_type == "replacement_screen":
-        return f"ecran {brand} {model} remplacement"
-    return f"{brand} {model} pour pieces sans ecran"
+        base = f"ecran {brand} {model} remplacement"
+    else:
+        base = f"{brand} {model} pour pieces sans ecran"
+    if category == "mobile_phone_parts":
+        return f"{base} telephone mobile pieces"
+    return base
 
 
 def extract_offer_id(url: str) -> str:
@@ -100,11 +106,18 @@ def _fetch_recent_offer_ids(
 
 
 def _search_ebay_via_jina(
-    brand: str, model: str, part_type: str, max_price_eur: float | None, timeout_seconds: int = 24
+    brand: str,
+    model: str,
+    part_type: str,
+    max_price_eur: float | None,
+    category: str = "mobile_phone_parts",
+    timeout_seconds: int = 24,
 ) -> list[dict]:
-    query = build_query(brand, model, part_type)
+    query = build_query(brand, model, part_type, category=category)
     max_price_param = f"&_udhi={int(max_price_eur)}" if max_price_eur else ""
+    category_param = "&_sacat=15032" if category == "mobile_phone_parts" else ""
     source_url = f"{BASE_URL}/sch/i.html?_nkw={quote_plus(query)}&_sop=15&rt=nc{max_price_param}"
+    source_url += category_param
     mirror_url = "https://r.jina.ai/http://" + source_url.replace("https://", "")
 
     headers = {
@@ -185,16 +198,22 @@ def _search_ebay_via_jina(
 
 
 def search_ebay(
-    brand: str, model: str, part_type: str, max_price_eur: float | None, timeout_seconds: int = 18
+    brand: str,
+    model: str,
+    part_type: str,
+    max_price_eur: float | None,
+    category: str = "mobile_phone_parts",
+    timeout_seconds: int = 18,
 ) -> list[dict]:
-    query = build_query(brand, model, part_type)
+    query = build_query(brand, model, part_type, category=category)
     max_price_param = ""
     if max_price_eur is not None and max_price_eur > 0:
         max_price_param = f"&_udhi={int(max_price_eur)}"
+    category_param = "&_sacat=15032" if category == "mobile_phone_parts" else ""
 
     url = (
         f"{BASE_URL}/sch/i.html?_nkw={quote_plus(query)}"
-        f"&_sop=15&LH_BIN=1{max_price_param}&rt=nc"
+        f"&_sop=15&LH_BIN=1{max_price_param}{category_param}&rt=nc"
     )
 
     headers = {
@@ -275,7 +294,14 @@ def search_ebay(
         )
 
     if not offers:
-        offers = _search_ebay_via_jina(brand, model, part_type, max_price_eur, timeout_seconds=24)
+        offers = _search_ebay_via_jina(
+            brand,
+            model,
+            part_type,
+            max_price_eur,
+            category=category,
+            timeout_seconds=24,
+        )
 
     recent_ids = _fetch_recent_offer_ids(query, max_price_eur, timeout_seconds=20)
     for row in offers:

@@ -16,10 +16,16 @@ class SourceName(str, Enum):
     EBAY = "ebay"
 
 
+class SearchCategory(str, Enum):
+    MOBILE_PHONE_PARTS = "mobile_phone_parts"
+    AUTO = "auto"
+
+
 class SearchRequest(BaseModel):
     brand: str = Field(min_length=1, max_length=60)
     model: str = Field(min_length=1, max_length=80)
     partType: PartType
+    category: SearchCategory = SearchCategory.MOBILE_PHONE_PARTS
     maxPriceEur: Optional[float] = Field(default=None, ge=0)
     sources: list[SourceName] = Field(default_factory=lambda: [SourceName.LBC, SourceName.EBAY])
     forceRefresh: bool = False

@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Request
+import httpx
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -19,6 +21,15 @@ APP_VERSION = os.environ.get("APP_VERSION", "0.1.0")
 APP_PORT = int(os.environ.get("APP_PORT", "8091"))
 DB_PATH = os.environ.get("DB_PATH", "/data/offers.db")
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
+IMAGE_PROXY_TIMEOUT_SECONDS = int(os.environ.get("IMAGE_PROXY_TIMEOUT_SECONDS", "10"))
+ALLOWED_IMAGE_HOSTS = tuple(
+    x.strip().lower()
+    for x in os.environ.get(
+        "IMAGE_PROXY_ALLOWED_HOSTS",
+        "i.ebayimg.com,img.leboncoin.fr,images.leboncoin.fr,ir.ebaystatic.com",
+    ).split(",")
+    if x.strip()
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -51,6 +62,48 @@ def health():
 def search(payload: SearchRequest):
     result = search_service.search(payload)
     return result
+
+
+@app.get("/api/image-proxy")
+def image_proxy(url: str = Query(min_length=8, max_length=1800)):
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=400, detail="invalid image url scheme")
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise HTTPException(status_code=400, detail="invalid image host")
+    allowed = any(host == h or host.endswith("." + h) for h in ALLOWED_IMAGE_HOSTS)
+    if not allowed:
+        raise HTTPException(status_code=400, detail="image host not allowed")
+
+    headers = {
+        "User-Agent": "PhoneRepairOffersBot/1.0 (+https://offers.actually-caring-about-billionaires.online)",
+        "Accept": "image/*,*/*;q=0.8",
+    }
+    try:
+        with httpx.Client(
+            timeout=IMAGE_PROXY_TIMEOUT_SECONDS,
+            follow_redirects=True,
+            headers=headers,
+        ) as client:
+            upstream = client.get(url)
+            upstream.raise_for_status()
+            content_type = (upstream.headers.get("Content-Type") or "").lower()
+            if not content_type.startswith("image/"):
+                raise RuntimeError("upstream is not an image")
+            content = upstream.content[:3_500_000]
+            return Response(
+                content=content,
+                media_type=content_type.split(";")[0],
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+    except Exception:
+        placeholder = BASE_DIR / "static" / "placeholder-offer.svg"
+        return Response(
+            content=placeholder.read_bytes(),
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=300"},
+        )
 
 
 @app.get("/api/favorites")

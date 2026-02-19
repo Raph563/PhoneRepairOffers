@@ -18,10 +18,19 @@ from app.services.offer_tools import (
 BASE_URL = "https://www.leboncoin.fr"
 
 
-def build_query(brand: str, model: str, part_type: str) -> str:
+def build_query(
+    brand: str,
+    model: str,
+    part_type: str,
+    category: str = "mobile_phone_parts",
+) -> str:
     if part_type == "replacement_screen":
-        return f"ecran {brand} {model} remplacement"
-    return f"{brand} {model} sans ecran pour pieces"
+        base = f"ecran {brand} {model} remplacement"
+    else:
+        base = f"{brand} {model} sans ecran pour pieces"
+    if category == "mobile_phone_parts":
+        return f"{base} telephones mobiles pieces"
+    return base
 
 
 def _walk_for_ads(node: Any, out: list[dict[str, Any]]) -> None:
@@ -46,9 +55,10 @@ def _search_leboncoin_via_jina(
     model: str,
     part_type: str,
     max_price_eur: float | None,
+    category: str = "mobile_phone_parts",
     timeout_seconds: int = 24,
 ) -> list[dict[str, Any]]:
-    query = build_query(brand, model, part_type)
+    query = build_query(brand, model, part_type, category=category)
     max_price_param = ""
     if max_price_eur is not None and max_price_eur > 0:
         max_price_param = f"&price=min-{int(max_price_eur)}"
@@ -114,9 +124,10 @@ def _search_leboncoin_via_duckduckgo(
     model: str,
     part_type: str,
     max_price_eur: float | None,
+    category: str = "mobile_phone_parts",
     timeout_seconds: int = 20,
 ) -> list[dict[str, Any]]:
-    query = build_query(brand, model, part_type)
+    query = build_query(brand, model, part_type, category=category)
     ddg_url = f"https://duckduckgo.com/html/?q={quote_plus('site:leboncoin.fr ' + query)}"
     headers = {
         "User-Agent": "PhoneRepairOffersBot/1.0 (+https://offers.actually-caring-about-billionaires.online)",
@@ -188,9 +199,14 @@ def _search_leboncoin_via_duckduckgo(
 
 
 def search_leboncoin(
-    brand: str, model: str, part_type: str, max_price_eur: float | None, timeout_seconds: int = 18
+    brand: str,
+    model: str,
+    part_type: str,
+    max_price_eur: float | None,
+    category: str = "mobile_phone_parts",
+    timeout_seconds: int = 18,
 ) -> list[dict[str, Any]]:
-    query = build_query(brand, model, part_type)
+    query = build_query(brand, model, part_type, category=category)
     max_price_param = ""
     if max_price_eur is not None and max_price_eur > 0:
         max_price_param = f"&price=min-{int(max_price_eur)}"
@@ -210,12 +226,22 @@ def search_leboncoin(
             html = response.text
     except httpx.HTTPError:
         mirror_offers = _search_leboncoin_via_jina(
-            brand, model, part_type, max_price_eur, timeout_seconds=24
+            brand,
+            model,
+            part_type,
+            max_price_eur,
+            category=category,
+            timeout_seconds=24,
         )
         if mirror_offers:
             return mirror_offers
         return _search_leboncoin_via_duckduckgo(
-            brand, model, part_type, max_price_eur, timeout_seconds=20
+            brand,
+            model,
+            part_type,
+            max_price_eur,
+            category=category,
+            timeout_seconds=20,
         )
 
     soup = BeautifulSoup(html, "lxml")
@@ -333,10 +359,20 @@ def search_leboncoin(
         return offers[:120]
 
     mirror_offers = _search_leboncoin_via_jina(
-        brand, model, part_type, max_price_eur, timeout_seconds=24
+        brand,
+        model,
+        part_type,
+        max_price_eur,
+        category=category,
+        timeout_seconds=24,
     )
     if mirror_offers:
         return mirror_offers
     return _search_leboncoin_via_duckduckgo(
-        brand, model, part_type, max_price_eur, timeout_seconds=20
+        brand,
+        model,
+        part_type,
+        max_price_eur,
+        category=category,
+        timeout_seconds=20,
     )

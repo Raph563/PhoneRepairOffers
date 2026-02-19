@@ -31,10 +31,16 @@ function sourceBadge(source) {
   return source === 'ebay' ? 'eBay' : 'Leboncoin';
 }
 
+function resolveOfferImageSrc(offer) {
+  if (offer && offer.imageUrl) {
+    return `/api/image-proxy?url=${encodeURIComponent(offer.imageUrl)}`;
+  }
+  return '/static/placeholder-offer.svg';
+}
+
 function cardTemplate(offer, isFavorite, favoriteId = null) {
-  const image = offer.imageUrl
-    ? `<img src="${offer.imageUrl}" alt="${offer.title}" loading="lazy">`
-    : `<div class="img-fallback">Aucune image</div>`;
+  const imageSrc = resolveOfferImageSrc(offer);
+  const image = `<img src="${imageSrc}" alt="${offer.title}" loading="lazy" onerror="this.onerror=null;this.src='/static/placeholder-offer.svg';">`;
 
   const recentTag = offer.source === 'ebay' && offer.isRecentlyAdded === true
     ? '<span class="badge badge-recent">Recemment ajoute</span>'
@@ -137,6 +143,7 @@ searchForm.addEventListener('submit', async (event) => {
       brand: document.getElementById('brand').value.trim(),
       model: document.getElementById('model').value.trim(),
       partType: document.getElementById('partType').value,
+      category: document.getElementById('category').value,
       sources,
       forceRefresh: document.getElementById('force-refresh').checked,
     };
