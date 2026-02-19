@@ -144,11 +144,17 @@ button {
 
 .body { padding: 10px; }
 .line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .badge {
   padding: 4px 9px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.3);
   font-size: 0.8rem;
+}
+.badge-recent {
+  border-color: rgba(25, 195, 166, 0.85);
+  background: rgba(25, 195, 166, 0.2);
+  color: #bffff1;
 }
 
 h3 { margin: 8px 0 6px; font-size: 1rem; }

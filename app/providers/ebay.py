@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import threading
+import time
 from urllib.parse import quote_plus
 
 import httpx
@@ -15,6 +17,9 @@ from app.services.offer_tools import (
 
 BASE_URL = "https://www.ebay.fr"
 EBAY_IMAGE_RE = re.compile(r"https://i\.ebayimg\.com/images/[^\s\)]+", re.IGNORECASE)
+RECENT_IDS_CACHE_LOCK = threading.Lock()
+RECENT_IDS_CACHE: dict[str, dict] = {}
+RECENT_IDS_TTL_SECONDS = 900
 
 
 def build_query(brand: str, model: str, part_type: str) -> str:
@@ -31,6 +36,67 @@ def extract_offer_id(url: str) -> str:
     if m:
         return m.group(1)
     return url
+
+
+def _recent_cache_key(query: str, max_price_eur: float | None) -> str:
+    if max_price_eur is None:
+        return f"{query}|none"
+    return f"{query}|{int(max_price_eur)}"
+
+
+def _extract_offer_ids_from_text(text: str, limit: int = 120) -> list[str]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    for match in re.finditer(r"https://www\.ebay\.[^\s)\]]*/itm/[^\s)\]]+", text, re.IGNORECASE):
+        offer_id = extract_offer_id(match.group(0))
+        if not re.fullmatch(r"[0-9]{8,20}", offer_id):
+            continue
+        if offer_id == "123456" or offer_id in seen:
+            continue
+        seen.add(offer_id)
+        ids.append(offer_id)
+        if len(ids) >= limit:
+            break
+    return ids
+
+
+def _fetch_recent_offer_ids(
+    query: str, max_price_eur: float | None, timeout_seconds: int = 20
+) -> set[str]:
+    cache_key = _recent_cache_key(query, max_price_eur)
+    now_ts = time.time()
+
+    with RECENT_IDS_CACHE_LOCK:
+        cached = RECENT_IDS_CACHE.get(cache_key)
+        if cached and float(cached.get("expires_at") or 0) > now_ts:
+            return set(cached.get("ids") or [])
+
+    max_price_param = f"&_udhi={int(max_price_eur)}" if max_price_eur else ""
+    recent_source_url = (
+        f"{BASE_URL}/sch/i.html?_nkw={quote_plus(query)}&_sop=10&rt=nc{max_price_param}"
+    )
+    mirror_url = "https://r.jina.ai/http://" + recent_source_url.replace("https://", "")
+    headers = {
+        "User-Agent": "PhoneRepairOffersBot/1.0 (+https://offers.actually-caring-about-billionaires.online)",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+    }
+
+    try:
+        with httpx.Client(
+            timeout=timeout_seconds, follow_redirects=True, headers=headers
+        ) as client:
+            response = client.get(mirror_url)
+            response.raise_for_status()
+            ids = _extract_offer_ids_from_text(response.text, limit=140)
+    except Exception:
+        ids = []
+
+    with RECENT_IDS_CACHE_LOCK:
+        RECENT_IDS_CACHE[cache_key] = {
+            "ids": ids,
+            "expires_at": now_ts + RECENT_IDS_TTL_SECONDS,
+        }
+    return set(ids)
 
 
 def _search_ebay_via_jina(
@@ -208,6 +274,11 @@ def search_ebay(
             }
         )
 
-    if offers:
-        return offers[:120]
-    return _search_ebay_via_jina(brand, model, part_type, max_price_eur, timeout_seconds=24)
+    if not offers:
+        offers = _search_ebay_via_jina(brand, model, part_type, max_price_eur, timeout_seconds=24)
+
+    recent_ids = _fetch_recent_offer_ids(query, max_price_eur, timeout_seconds=20)
+    for row in offers:
+        row["isRecentlyAdded"] = str(row.get("sourceOfferId") or "") in recent_ids
+
+    return offers[:120]

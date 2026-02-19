@@ -36,12 +36,19 @@ function cardTemplate(offer, isFavorite, favoriteId = null) {
     ? `<img src="${offer.imageUrl}" alt="${offer.title}" loading="lazy">`
     : `<div class="img-fallback">Aucune image</div>`;
 
+  const recentTag = offer.source === 'ebay' && offer.isRecentlyAdded === true
+    ? '<span class="badge badge-recent">Recemment ajoute</span>'
+    : '';
+
   return `
     <article class="offer-card" data-offer-id="${offer.id}" data-favorite-id="${favoriteId || ''}">
       <div class="thumb">${image}</div>
       <div class="body">
         <div class="line top">
-          <span class="badge">${sourceBadge(offer.source)}</span>
+          <div class="badges">
+            <span class="badge">${sourceBadge(offer.source)}</span>
+            ${recentTag}
+          </div>
           <strong>${euro(offer.totalEur)}</strong>
         </div>
         <h3><a href="${offer.url}" target="_blank" rel="noopener noreferrer">${offer.title}</a></h3>

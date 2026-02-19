@@ -38,6 +38,7 @@ class Offer(BaseModel):
     location: Optional[str] = None
     conditionText: Optional[str] = None
     postedAt: Optional[str] = None
+    isRecentlyAdded: bool = False
     queryType: PartType
     rankScore: float
 
