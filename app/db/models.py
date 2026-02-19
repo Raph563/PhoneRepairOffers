@@ -14,6 +14,7 @@ class PartType(str, Enum):
 class SourceName(str, Enum):
     LBC = "leboncoin"
     EBAY = "ebay"
+    ALIEXPRESS = "aliexpress"
 
 
 class SearchCategory(str, Enum):
@@ -27,7 +28,9 @@ class SearchRequest(BaseModel):
     partType: PartType
     category: SearchCategory = SearchCategory.MOBILE_PHONE_PARTS
     maxPriceEur: Optional[float] = Field(default=None, ge=0)
-    sources: list[SourceName] = Field(default_factory=lambda: [SourceName.LBC, SourceName.EBAY])
+    sources: list[SourceName] = Field(
+        default_factory=lambda: [SourceName.LBC, SourceName.EBAY, SourceName.ALIEXPRESS]
+    )
     forceRefresh: bool = False
 
 

@@ -26,7 +26,7 @@ ALLOWED_IMAGE_HOSTS = tuple(
     x.strip().lower()
     for x in os.environ.get(
         "IMAGE_PROXY_ALLOWED_HOSTS",
-        "i.ebayimg.com,img.leboncoin.fr,images.leboncoin.fr,ir.ebaystatic.com",
+        "i.ebayimg.com,img.leboncoin.fr,images.leboncoin.fr,ir.ebaystatic.com,alicdn.com,aliexpress-media.com",
     ).split(",")
     if x.strip()
 )

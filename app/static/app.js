@@ -28,7 +28,9 @@ function euro(value) {
 }
 
 function sourceBadge(source) {
-  return source === 'ebay' ? 'eBay' : 'Leboncoin';
+  if (source === 'ebay') return 'eBay';
+  if (source === 'aliexpress') return 'AliExpress';
+  return 'Leboncoin';
 }
 
 function resolveOfferImageSrc(offer) {
@@ -124,6 +126,7 @@ function parseSources() {
   const sources = [];
   if (document.getElementById('source-lbc').checked) sources.push('leboncoin');
   if (document.getElementById('source-ebay').checked) sources.push('ebay');
+  if (document.getElementById('source-ali').checked) sources.push('aliexpress');
   return sources;
 }
 

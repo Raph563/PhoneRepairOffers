@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from app.db.database import Database
 from app.db.models import SearchRequest
+from app.providers.aliexpress import search_aliexpress
 from app.providers.ebay import search_ebay
 from app.providers.leboncoin import search_leboncoin
 from app.services.image_enricher import ImageEnricher
@@ -35,6 +36,7 @@ class SearchService:
         self.providers: dict[str, ProviderFn] = {
             "leboncoin": search_leboncoin,
             "ebay": search_ebay,
+            "aliexpress": search_aliexpress,
         }
 
     @staticmethod
