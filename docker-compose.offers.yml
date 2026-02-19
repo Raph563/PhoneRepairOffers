@@ -1,0 +1,16 @@
+services:
+  phone-repair-offers:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phone-repair-offers
+    environment:
+      - APP_PORT=8091
+      - DB_PATH=/data/offers.db
+      - CACHE_TTL_SECONDS=900
+      - APP_VERSION=dev
+    volumes:
+      - ./data:/data
+    ports:
+      - "8091:8091"
+    restart: unless-stopped

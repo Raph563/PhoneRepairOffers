@@ -1,0 +1,32 @@
+name: Deploy VPS
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            if [ ! -d /opt/grocy/services/phone-repair-offers/.git ]; then
+              rm -rf /opt/grocy/services/phone-repair-offers
+              git clone https://github.com/${{ github.repository }}.git /opt/grocy/services/phone-repair-offers
+            fi
+            cd /opt/grocy/services/phone-repair-offers
+            git fetch --all --tags
+            git checkout main
+            git pull --ff-only origin main
+
+            docker compose -f /opt/grocy/docker-compose.yml up -d --build phone-repair-offers
+            docker compose -f /opt/grocy/docker-compose.yml restart grocy-caddy
+
+            curl -fsS https://offers.actually-caring-about-billionaires.online/health

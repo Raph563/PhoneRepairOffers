@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhoneRepairOffers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="bg-shape shape-1"></div>
+  <div class="bg-shape shape-2"></div>
+
+  <main class="app-shell">
+    <header class="hero">
+      <h1>PhoneRepairOffers</h1>
+      <p>Comparateur d'offres Leboncoin + eBay pour reparer des telephones.</p>
+      <div class="version">v{{ app_version }}</div>
+    </header>
+
+    <section class="tabs">
+      <button class="tab is-active" data-tab="search">Recherche</button>
+      <button class="tab" data-tab="favorites">Favoris</button>
+    </section>
+
+    <section id="panel-search" class="panel is-active">
+      <form id="search-form" class="card">
+        <div class="row">
+          <label>Marque
+            <input type="text" id="brand" required placeholder="Apple, Samsung...">
+          </label>
+          <label>Modele
+            <input type="text" id="model" required placeholder="iPhone 12, S21...">
+          </label>
+        </div>
+        <div class="row">
+          <label>Type de piece
+            <select id="partType">
+              <option value="replacement_screen">Ecran de remplacement</option>
+              <option value="phone_without_screen">Telephone sans ecran</option>
+            </select>
+          </label>
+          <label>Prix max (EUR)
+            <input type="number" id="maxPrice" min="0" step="1" placeholder="optionnel">
+          </label>
+        </div>
+        <div class="row">
+          <label class="inline"><input type="checkbox" id="source-lbc" checked> Leboncoin</label>
+          <label class="inline"><input type="checkbox" id="source-ebay" checked> eBay</label>
+          <label class="inline"><input type="checkbox" id="force-refresh"> Ignorer le cache</label>
+        </div>
+        <div class="row actions">
+          <button type="submit" id="search-btn">Rechercher</button>
+          <div id="search-status" class="status">Pret.</div>
+        </div>
+      </form>
+
+      <div class="card">
+        <div class="list-header">
+          <h2>Resultats</h2>
+          <span id="result-meta"></span>
+        </div>
+        <div id="search-results" class="offer-list"></div>
+      </div>
+    </section>
+
+    <section id="panel-favorites" class="panel">
+      <div class="card">
+        <div class="list-header">
+          <h2>Favoris</h2>
+          <button id="refresh-favorites">Actualiser</button>
+        </div>
+        <div id="favorites-results" class="offer-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
