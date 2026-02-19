@@ -136,7 +136,10 @@ button {
   background: rgba(255, 255, 255, 0.02);
 }
 
-.thumb { min-height: 110px; background: rgba(0, 0, 0, 0.25); }
+.thumb {
+  min-height: 110px;
+  background: rgba(0, 0, 0, 0.25) url("/static/placeholder-offer.svg") center / cover no-repeat;
+}
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .img-fallback {
   width: 100%; height: 100%; display: grid; place-items: center; font-size: 0.84rem; color: var(--muted);

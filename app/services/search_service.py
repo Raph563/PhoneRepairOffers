@@ -25,7 +25,7 @@ class SearchService:
             "false",
             "False",
         }
-        image_max_per_search = int(os.environ.get("IMAGE_ENRICH_MAX_PER_SEARCH", "40"))
+        image_max_per_search = int(os.environ.get("IMAGE_ENRICH_MAX_PER_SEARCH", "120"))
         image_timeout_seconds = int(os.environ.get("IMAGE_ENRICH_TIMEOUT_SECONDS", "8"))
         self.image_enricher = ImageEnricher(
             enabled=enable_image_enrich,

@@ -16,6 +16,10 @@ from app.services.offer_tools import (
 )
 
 BASE_URL = "https://www.leboncoin.fr"
+LEBONCOIN_IMAGE_RE = re.compile(
+    r"https://(?:img|images)\.leboncoin\.fr/[^\s\)]+",
+    re.IGNORECASE,
+)
 
 
 def build_query(
@@ -95,6 +99,14 @@ def _search_leboncoin_via_jina(
         if m:
             listing_id = m.group(1)
 
+        image_url = None
+        left = max(0, match.start() - 900)
+        right = min(len(text), match.end() + 900)
+        near = text[left:right]
+        image_candidates = LEBONCOIN_IMAGE_RE.findall(near)
+        if image_candidates:
+            image_url = normalize_spaces(image_candidates[-1].rstrip(".,;"))
+
         total_eur = round(price_eur, 2)
         offer_id = compute_offer_id("leboncoin", listing_id, url)
         offers.append(
@@ -104,7 +116,7 @@ def _search_leboncoin_via_jina(
                 "sourceOfferId": listing_id,
                 "title": title,
                 "url": url,
-                "imageUrl": None,
+                "imageUrl": image_url,
                 "priceEur": round(price_eur, 2),
                 "shippingEur": 0.0,
                 "totalEur": total_eur,
@@ -175,6 +187,15 @@ def _search_leboncoin_via_duckduckgo(
         if m:
             listing_id = m.group(1)
 
+        image_url = None
+        image_el = card.select_one("img[src]")
+        if image_el:
+            image_src = normalize_spaces(str(image_el.get("src") or ""))
+            if image_src.startswith("//"):
+                image_src = "https:" + image_src
+            if image_src.startswith("http"):
+                image_url = image_src
+
         total = round(price, 2)
         offer_id = compute_offer_id("leboncoin", listing_id, href)
         offers.append(
@@ -184,7 +205,7 @@ def _search_leboncoin_via_duckduckgo(
                 "sourceOfferId": listing_id,
                 "title": title,
                 "url": href,
-                "imageUrl": None,
+                "imageUrl": image_url,
                 "priceEur": round(price, 2),
                 "shippingEur": 0.0,
                 "totalEur": total,
