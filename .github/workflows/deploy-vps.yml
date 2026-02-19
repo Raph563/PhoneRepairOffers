@@ -27,6 +27,17 @@ jobs:
             git pull --ff-only origin main
 
             docker compose -f /opt/grocy/docker-compose.yml up -d --build phone-repair-offers
-            docker compose -f /opt/grocy/docker-compose.yml restart grocy-caddy
+            docker compose -f /opt/grocy/docker-compose.yml restart caddy
 
-            curl -fsS https://offers.actually-caring-about-billionaires.online/health
+            ok=0
+            for i in 1 2 3 4 5; do
+              if curl -fsS https://offers.actually-caring-about-billionaires.online/health; then
+                ok=1
+                break
+              fi
+              sleep 3
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "Healthcheck failed"
+              exit 1
+            fi
