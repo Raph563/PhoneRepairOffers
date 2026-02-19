@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
@@ -9,6 +10,7 @@ from app.db.database import Database
 from app.db.models import SearchRequest
 from app.providers.ebay import search_ebay
 from app.providers.leboncoin import search_leboncoin
+from app.services.image_enricher import ImageEnricher
 from app.services.offer_tools import dedupe_offers
 
 ProviderFn = Callable[[str, str, str, float | None], list[dict[str, Any]]]
@@ -18,6 +20,18 @@ class SearchService:
     def __init__(self, db: Database, cache_ttl_seconds: int = 900):
         self.db = db
         self.cache_ttl_seconds = max(60, int(cache_ttl_seconds))
+        enable_image_enrich = os.environ.get("ENABLE_IMAGE_ENRICH", "1").strip() not in {
+            "0",
+            "false",
+            "False",
+        }
+        image_max_per_search = int(os.environ.get("IMAGE_ENRICH_MAX_PER_SEARCH", "40"))
+        image_timeout_seconds = int(os.environ.get("IMAGE_ENRICH_TIMEOUT_SECONDS", "8"))
+        self.image_enricher = ImageEnricher(
+            enabled=enable_image_enrich,
+            max_per_search=image_max_per_search,
+            timeout_seconds=image_timeout_seconds,
+        )
         self.providers: dict[str, ProviderFn] = {
             "leboncoin": search_leboncoin,
             "ebay": search_ebay,
@@ -76,6 +90,7 @@ class SearchService:
 
         offers = dedupe_offers(offers)
         offers.sort(key=lambda row: (float(row.get("totalEur", 0)), float(row.get("rankScore", 0))))
+        self.image_enricher.enrich(offers)
 
         payload = {
             "offers": offers,

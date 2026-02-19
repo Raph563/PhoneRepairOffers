@@ -14,6 +14,7 @@ from app.services.offer_tools import (
 )
 
 BASE_URL = "https://www.ebay.fr"
+EBAY_IMAGE_RE = re.compile(r"https://i\.ebayimg\.com/images/[^\s\)]+", re.IGNORECASE)
 
 
 def build_query(brand: str, model: str, part_type: str) -> str:
@@ -74,6 +75,15 @@ def _search_ebay_via_jina(
         if price_eur <= 0:
             continue
 
+        image_url = None
+        # The mirror often includes product image URLs near the listing link.
+        left = max(0, match.start() - 700)
+        right = min(len(text), match.end() + 80)
+        near = text[left:right]
+        image_candidates = EBAY_IMAGE_RE.findall(near)
+        if image_candidates:
+            image_url = normalize_spaces(image_candidates[-1].rstrip(".,;"))
+
         source_offer_id = extract_offer_id(url_value)
         total = round(price_eur, 2)
         offer_id = compute_offer_id("ebay", source_offer_id, url_value)
@@ -84,7 +94,7 @@ def _search_ebay_via_jina(
                 "sourceOfferId": source_offer_id,
                 "title": title,
                 "url": url_value,
-                "imageUrl": None,
+                "imageUrl": image_url,
                 "priceEur": round(price_eur, 2),
                 "shippingEur": 0.0,
                 "totalEur": total,
