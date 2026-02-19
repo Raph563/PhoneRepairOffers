@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import parse_qs, quote_plus, urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -291,6 +291,64 @@ def _search_aliexpress_via_duckduckgo_lite(
     return _dedupe_by_offer_id(offers)[:120]
 
 
+def _search_aliexpress_via_jina_duckduckgo_lite(
+    brand: str,
+    model: str,
+    part_type: str,
+    max_price_eur: float | None,
+    category: str = "mobile_phone_parts",
+    timeout_seconds: int = 24,
+) -> list[dict]:
+    query = build_query(brand, model, part_type, category=category)
+    source_url = f"https://lite.duckduckgo.com/lite/?q={quote_plus('site:fr.aliexpress.com/item ' + query)}"
+    mirror_url = "https://r.jina.ai/http://" + source_url.replace("https://", "")
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+        "Referer": "https://duckduckgo.com/",
+    }
+    with httpx.Client(timeout=timeout_seconds, follow_redirects=True, headers=headers) as client:
+        response = client.get(mirror_url)
+        response.raise_for_status()
+        text = response.text
+
+    offers: list[dict] = []
+    pattern = re.compile(
+        r"\[[^\]]*?(?P<title>[^\]]+)\]\((?P<ddg>https://duckduckgo\.com/l/\?[^)]+)\)",
+        re.IGNORECASE,
+    )
+    for match in pattern.finditer(text):
+        title = normalize_spaces(match.group("title"))
+        ddg_redirect = normalize_spaces(match.group("ddg"))
+        parsed = urlparse(ddg_redirect)
+        target_encoded = parse_qs(parsed.query).get("uddg", [""])[0]
+        if not target_encoded:
+            continue
+        target = normalize_spaces(unquote(target_encoded))
+        if "&rut=" in target:
+            target = target.split("&rut=", 1)[0]
+        if "aliexpress.com/item/" not in target:
+            continue
+
+        line_left = max(0, match.start() - 120)
+        line_right = min(len(text), match.end() + 220)
+        near = normalize_spaces(text[line_left:line_right])
+
+        offer = _build_offer(
+            title=title,
+            url_value=target,
+            part_type=part_type,
+            max_price_eur=max_price_eur,
+            text_for_price=near,
+            image_url=None,
+        )
+        if offer:
+            offers.append(offer)
+
+    return _dedupe_by_offer_id(offers)[:120]
+
+
 def search_aliexpress(
     brand: str,
     model: str,
@@ -378,6 +436,20 @@ def search_aliexpress(
         mirror_offers = []
     if mirror_offers:
         return mirror_offers
+
+    try:
+        jina_ddg_lite_offers = _search_aliexpress_via_jina_duckduckgo_lite(
+            brand,
+            model,
+            part_type,
+            max_price_eur,
+            category=category,
+            timeout_seconds=24,
+        )
+    except Exception:
+        jina_ddg_lite_offers = []
+    if jina_ddg_lite_offers:
+        return jina_ddg_lite_offers
 
     try:
         ddg_offers = _search_aliexpress_via_duckduckgo_html(
