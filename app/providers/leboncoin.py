@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, quote_plus, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -109,6 +109,84 @@ def _search_leboncoin_via_jina(
     return offers[:120]
 
 
+def _search_leboncoin_via_duckduckgo(
+    brand: str,
+    model: str,
+    part_type: str,
+    max_price_eur: float | None,
+    timeout_seconds: int = 20,
+) -> list[dict[str, Any]]:
+    query = build_query(brand, model, part_type)
+    ddg_url = f"https://duckduckgo.com/html/?q={quote_plus('site:leboncoin.fr ' + query)}"
+    headers = {
+        "User-Agent": "PhoneRepairOffersBot/1.0 (+https://offers.actually-caring-about-billionaires.online)",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+    }
+    with httpx.Client(timeout=timeout_seconds, follow_redirects=True, headers=headers) as client:
+        response = client.get(ddg_url)
+        response.raise_for_status()
+        html = response.text
+
+    soup = BeautifulSoup(html, "lxml")
+    offers: list[dict[str, Any]] = []
+
+    for card in soup.select(".result"):
+        a = card.select_one("a.result__a")
+        if not a:
+            continue
+        href = str(a.get("href") or "")
+        if not href:
+            continue
+
+        if "duckduckgo.com/l/" in href:
+            parsed = urlparse(href)
+            target = parse_qs(parsed.query).get("uddg", [""])[0]
+            if target:
+                href = target
+        href = normalize_spaces(href)
+        if "leboncoin.fr" not in href:
+            continue
+
+        title = normalize_spaces(a.get_text(" ", strip=True))
+        snippet = normalize_spaces(
+            (card.select_one(".result__snippet").get_text(" ", strip=True))
+            if card.select_one(".result__snippet")
+            else ""
+        )
+        price = parse_price_to_eur(f"{title} {snippet}")
+        if price <= 0:
+            continue
+        if max_price_eur is not None and max_price_eur > 0 and price > max_price_eur:
+            continue
+
+        listing_id = href
+        m = re.search(r"/([0-9]+)(?:\\?|$)", href)
+        if m:
+            listing_id = m.group(1)
+
+        total = round(price, 2)
+        offer_id = compute_offer_id("leboncoin", listing_id, href)
+        offers.append(
+            {
+                "id": offer_id,
+                "source": "leboncoin",
+                "sourceOfferId": listing_id,
+                "title": title,
+                "url": href,
+                "imageUrl": None,
+                "priceEur": round(price, 2),
+                "shippingEur": 0.0,
+                "totalEur": total,
+                "location": None,
+                "conditionText": None,
+                "postedAt": None,
+                "queryType": part_type,
+                "rankScore": compute_rank_score(title, total),
+            }
+        )
+    return offers[:80]
+
+
 def search_leboncoin(
     brand: str, model: str, part_type: str, max_price_eur: float | None, timeout_seconds: int = 18
 ) -> list[dict[str, Any]]:
@@ -131,8 +209,13 @@ def search_leboncoin(
             response.raise_for_status()
             html = response.text
     except httpx.HTTPError:
-        return _search_leboncoin_via_jina(
+        mirror_offers = _search_leboncoin_via_jina(
             brand, model, part_type, max_price_eur, timeout_seconds=24
+        )
+        if mirror_offers:
+            return mirror_offers
+        return _search_leboncoin_via_duckduckgo(
+            brand, model, part_type, max_price_eur, timeout_seconds=20
         )
 
     soup = BeautifulSoup(html, "lxml")
@@ -248,4 +331,12 @@ def search_leboncoin(
 
     if offers:
         return offers[:120]
-    return _search_leboncoin_via_jina(brand, model, part_type, max_price_eur, timeout_seconds=24)
+
+    mirror_offers = _search_leboncoin_via_jina(
+        brand, model, part_type, max_price_eur, timeout_seconds=24
+    )
+    if mirror_offers:
+        return mirror_offers
+    return _search_leboncoin_via_duckduckgo(
+        brand, model, part_type, max_price_eur, timeout_seconds=20
+    )
